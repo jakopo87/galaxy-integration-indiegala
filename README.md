@@ -25,12 +25,12 @@ for example:
 1. create and activate virtual environment
 2. install dependencies
 
-        pip install -r requirements/dev.txt
+        pip install -r .\requirements\dev.txt -t .\src\
 
 3. run tests
 
         pytest
-        
+
 4. install to your local GOG galaxy
- 
+
         inv install
