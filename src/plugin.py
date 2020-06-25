@@ -2,10 +2,12 @@ import json
 import logging
 from pathlib import Path
 import sys
+import webbrowser
+import re
 
 from bs4 import BeautifulSoup
 from galaxy.api.plugin import Plugin, create_and_run_plugin
-from galaxy.api.consts import Platform, LicenseType
+from galaxy.api.consts import Platform, LicenseType, OSCompatibility
 from galaxy.api.types import NextStep, Authentication, Game, LicenseInfo
 from galaxy.api.errors import AuthenticationRequired
 
@@ -13,6 +15,20 @@ from http_client import HTTPClient
 
 with open(Path(__file__).parent / 'manifest.json', 'r') as f:
     __version__ = json.load(f)['version']
+
+DOWNLOAD_LINKS_KEY = "download_links"
+
+Indiegala_os = {
+    'win': OSCompatibility.Windows,
+    'lin': OSCompatibility.Linux,
+    'mac': OSCompatibility.MacOS,
+}
+
+Supported_os = {
+    'win32': 'win',
+    'linux': 'lin',
+    'darwin': 'mac'
+}
 
 END_URI_REGEX = r"^https://www\.indiegala\.com/?(#.*)?$"
 
@@ -57,6 +73,8 @@ class IndieGalaPlugin(Plugin):
         )
         self.http_client = HTTPClient(self.store_credentials)
         self.session_cookie = None
+        self.download_links = json.loads(
+            self.persistent_cache.get(DOWNLOAD_LINKS_KEY, '{}'))
 
     async def shutdown(self):
         await self.http_client.close()
@@ -93,7 +111,22 @@ class IndieGalaPlugin(Plugin):
                 return games
             soup = BeautifulSoup(raw_html)
             games.extend(self.parse_html_into_games(soup))
+            self.cache_download_url(soup)
             page += 1
+
+    def cache_download_url(self, soup):
+        links = soup.select('.library-showcase-download-btn')
+        cache = self.download_links
+
+        for link in links:
+            url = re.search(r"'(.*)'", link['onclick']).groups()[0]
+            game_id, supported_os = url.split("/")[-1].split(".")[0].split("_")
+            game_download_links = cache.get(game_id, {})
+            game_download_links[supported_os] = url
+            cache[game_id] = game_download_links
+
+        self.persistent_cache[DOWNLOAD_LINKS_KEY] = self.download_links
+        self.push_cache()
 
     async def get_user_info(self):
         text = await self.http_client.get(HOMEPAGE)
@@ -104,6 +137,33 @@ class IndieGalaPlugin(Plugin):
 
     async def retrieve_showcase_html(self, n=1):
         return await self.http_client.get(SHOWCASE_URL % n)
+
+    async def get_os_compatibility(self, game_id, context):
+        # cache = self.persistent_cache.get(DOWNLOAD_LINKS_KEY, {})
+        cache = self.download_links
+        compat = 0
+
+        if not cache[game_id]:
+            return
+
+        cache = cache[game_id]
+
+        for os_name in ['win', 'lin', 'mac']:
+            if cache[os_name]:
+                compat = compat | Indiegala_os[os_name]
+
+        return compat
+
+    async def launch_game(self, game_id: str) -> None:
+        pass
+
+    async def install_game(self, game_id: str) -> None:
+        logging.debug('Installing %s', game_id)
+        game_links = self.download_links[game_id]
+        logging.debug(game_links)
+        url = game_links[Supported_os[sys.platform]]
+        logging.debug('Launching %s', url)
+        webbrowser.open(url)
 
     @staticmethod
     def parse_html_into_games(soup):
