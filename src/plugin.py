@@ -91,7 +91,8 @@ class IndieGalaPlugin(Plugin):
 
     async def pass_login_credentials(self, step, credentials, cookies):
         """Called just after CEF authentication (called as NextStep by authenticate)"""
-        session_cookies = {cookie['name']: cookie['value'] for cookie in cookies if cookie['name']}
+        session_cookies = {cookie['name']: cookie['value']
+                           for cookie in cookies if cookie['name']}
         self.http_client.update_cookies(session_cookies)
         try:
             return await self.get_user_info()
