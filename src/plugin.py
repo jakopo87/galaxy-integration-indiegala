@@ -146,13 +146,13 @@ class IndieGalaPlugin(Plugin):
         cache = self.download_links
         compat = OSCompatibility(0)
 
-        if not cache[game_id]:
+        if not game_id in cache:
             return
 
         cache = cache[game_id]
 
         for os_name in ['win', 'lin', 'mac']:
-            if cache[os_name]:
+            if os_name in cache:
                 compat = compat | Indiegala_os[os_name]
 
         return compat
