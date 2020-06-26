@@ -131,9 +131,12 @@ class IndieGalaPlugin(Plugin):
     async def get_user_info(self):
         text = await self.http_client.get(HOMEPAGE)
         soup = BeautifulSoup(text)
-        username_div = soup.select('div.username-text')[0]
-        username = str(username_div.string)
-        return Authentication(username, username)
+        try:
+            username_div = soup.select('div.username-text')[0]
+            username = str(username_div.string)
+            return Authentication(username, username)
+        except AuthenticationRequired:
+            return NextStep("web_session", SECURITY_AUTH_PARAMS, cookies=self.http_client.get_next_step_cookies(), js=SECURITY_JS)
 
     async def retrieve_showcase_html(self, n=1):
         return await self.http_client.get(SHOWCASE_URL % n)
