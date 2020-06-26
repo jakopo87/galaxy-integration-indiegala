@@ -23,7 +23,14 @@ from operator import itemgetter, sub, gt, lt
 from sys import maxsize
 from time import monotonic
 
-from .recipes import consume, flatten, powerset, take, unique_everseen
+from .recipes import (
+    consume,
+    flatten,
+    pairwise,
+    powerset,
+    take,
+    unique_everseen,
+)
 
 __all__ = [
     'adjacent',
@@ -37,6 +44,7 @@ __all__ = [
     'consecutive_groups',
     'consumer',
     'count_cycle',
+    'mark_ends',
     'difference',
     'distinct_combinations',
     'distinct_permutations',
@@ -53,6 +61,7 @@ __all__ = [
     'islice_extended',
     'iterate',
     'ichunked',
+    'is_sorted',
     'last',
     'locate',
     'lstrip',
@@ -93,6 +102,8 @@ __all__ = [
     'unzip',
     'windowed',
     'with_iter',
+    'UnequalIterablesError',
+    'zip_equal',
     'zip_offset',
 ]
 
@@ -142,16 +153,12 @@ def first(iterable, default=_marker):
     """
     try:
         return next(iter(iterable))
-    except StopIteration:
-        # I'm on the edge about raising ValueError instead of StopIteration. At
-        # the moment, ValueError wins, because the caller could conceivably
-        # want to do something different with flow control when I raise the
-        # exception, and it's weird to explicitly catch StopIteration.
+    except StopIteration as e:
         if default is _marker:
             raise ValueError(
                 'first() was called on an empty iterable, and no '
                 'default value was provided.'
-            )
+            ) from e
         return default
 
 
@@ -174,12 +181,12 @@ def last(iterable, default=_marker):
         except (TypeError, AttributeError, KeyError):
             # If not slice-able, iterate entirely using length-1 deque
             return deque(iterable, maxlen=1)[0]
-    except IndexError:  # If the iterable was empty
+    except IndexError as e:  # If the iterable was empty
         if default is _marker:
             raise ValueError(
                 'last() was called on an empty iterable, and no '
                 'default value was provided.'
-            )
+            ) from e
         return default
 
 
@@ -528,8 +535,10 @@ def one(iterable, too_short=None, too_long=None):
 
     try:
         first_value = next(it)
-    except StopIteration:
-        raise too_short or ValueError('too few items in iterable (expected 1)')
+    except StopIteration as e:
+        raise (
+            too_short or ValueError('too few items in iterable (expected 1)')
+        ) from e
 
     try:
         second_value = next(it)
@@ -545,7 +554,7 @@ def one(iterable, too_short=None, too_long=None):
     return first_value
 
 
-def distinct_permutations(iterable):
+def distinct_permutations(iterable, r=None):
     """Yield successive distinct permutations of the elements in *iterable*.
 
         >>> sorted(distinct_permutations([1, 0, 1]))
@@ -561,30 +570,86 @@ def distinct_permutations(iterable):
     items input, and each `x_i` is the count of a distinct item in the input
     sequence.
 
+    If *r* is given, only the *r*-length permutations are yielded.
+
+        >>> sorted(distinct_permutations([1, 0, 1], r=3))
+        [(0, 1, 1), (1, 0, 1), (1, 1, 0)]
+
     """
+    # Algorithm: https://w.wiki/Qai
+    def _full(A):
+        while True:
+            # Yield the permutation we have
+            yield tuple(A)
 
-    def make_new_permutations(pool, e):
-        """Internal helper function.
-        The output permutations are built up by adding element *e* to the
-        current *permutations* at every possible position.
-        The key idea is to keep repeated elements (reverse) ordered:
-        if e1 == e2 and e1 is before e2 in the iterable, then all permutations
-        with e1 before e2 are ignored.
-
-        """
-        for perm in pool:
-            for j in range(len(perm)):
-                yield perm[:j] + (e,) + perm[j:]
-                if perm[j] == e:
+            # Find the largest index i such that A[i] < A[i + 1]
+            for i in range(size - 2, -1, -1):
+                if A[i] < A[i + 1]:
                     break
+            #  If no such index exists, this permutation is the last one
             else:
-                yield perm + (e,)
+                return
 
-    permutations = [()]
-    for e in iterable:
-        permutations = make_new_permutations(permutations, e)
+            # Find the largest index j greater than j such that A[i] < A[j]
+            for j in range(size - 1, i, -1):
+                if A[i] < A[j]:
+                    break
 
-    return (tuple(t) for t in permutations)
+            # Swap the value of A[i] with that of A[j], then reverse the
+            # sequence from A[i + 1] to form the new permutation
+            A[i], A[j] = A[j], A[i]
+            A[i + 1 :] = A[: i - size : -1]  # A[i + 1:][::-1]
+
+    # Algorithm: modified from the above
+    def _partial(A, r):
+        # Split A into the first r items and the last r items
+        head, tail = A[:r], A[r:]
+        right_head_indexes = range(r - 1, -1, -1)
+        left_tail_indexes = range(len(tail))
+
+        while True:
+            # Yield the permutation we have
+            yield tuple(head)
+
+            # Starting from the right, find the first index of the head with
+            # value smaller than the maximum value of the tail - call it i.
+            pivot = tail[-1]
+            for i in right_head_indexes:
+                if head[i] < pivot:
+                    break
+                pivot = head[i]
+            else:
+                return
+
+            # Starting from the left, find the first value of the tail
+            # with a value greater than head[i] and swap.
+            for j in left_tail_indexes:
+                if tail[j] > head[i]:
+                    head[i], tail[j] = tail[j], head[i]
+                    break
+            # If we didn't find one, start from the right and find the first
+            # index of the head with a value greater than head[i] and swap.
+            else:
+                for j in right_head_indexes:
+                    if head[j] > head[i]:
+                        head[i], head[j] = head[j], head[i]
+                        break
+
+            # Reverse head[i + 1:] and swap it with tail[:r - (i + 1)]
+            tail += head[: i - r : -1]  # head[i + 1:][::-1]
+            i += 1
+            head[i:], tail[:] = tail[: r - i], tail[r - i :]
+
+    items = sorted(iterable)
+
+    size = len(items)
+    if r is None:
+        r = size
+
+    if 0 < r <= size:
+        return _full(items) if (r == size) else _partial(items, r)
+
+    return iter(() if r else ((),))
 
 
 def intersperse(e, iterable, n=1):
@@ -654,7 +719,7 @@ def windowed(seq, n, fillvalue=None, step=1):
         [(1, 2, 3), (2, 3, 4), (3, 4, 5)]
 
     When the window is larger than the iterable, *fillvalue* is used in place
-    of missing values::
+    of missing values:
 
         >>> list(windowed([1, 2, 3], 4))
         [(1, 2, 3, None)]
@@ -672,7 +737,6 @@ def windowed(seq, n, fillvalue=None, step=1):
         >>> padding = [None] * (n - 1)
         >>> list(windowed(chain(padding, iterable), 3))
         [(None, None, 1), (None, 1, 2), (1, 2, 3), (2, 3, 4)]
-
     """
     if n < 0:
         raise ValueError('n must be >= 0')
@@ -682,28 +746,19 @@ def windowed(seq, n, fillvalue=None, step=1):
     if step < 1:
         raise ValueError('step must be >= 1')
 
-    it = iter(seq)
-    window = deque([], n)
-    append = window.append
-
-    # Initial deque fill
-    for _ in range(n):
-        append(next(it, fillvalue))
-    yield tuple(window)
-
-    # Appending new items to the right causes old items to fall off the left
-    i = 0
-    for item in it:
-        append(item)
-        i = (i + 1) % step
-        if i % step == 0:
+    window = deque(maxlen=n)
+    i = n
+    for _ in map(window.append, seq):
+        i -= 1
+        if not i:
+            i = step
             yield tuple(window)
 
-    # If there are items from the iterable in the window, pad with the given
-    # value and emit them.
-    if (i % step) and (step - i < n):
-        for _ in range(step - i):
-            append(fillvalue)
+    size = len(window)
+    if size < n:
+        yield tuple(chain(window, repeat(fillvalue, n - size)))
+    elif 0 < i < min(step, n):
+        window += (fillvalue,) * i
         yield tuple(window)
 
 
@@ -903,7 +958,7 @@ def spy(iterable, n=1):
     it = iter(iterable)
     head = take(n, it)
 
-    return head, chain(head, it)
+    return head.copy(), chain(head, it)
 
 
 def interleave(*iterables):
@@ -1064,28 +1119,51 @@ def sliced(seq, n):
     return takewhile(len, (seq[i : i + n] for i in count(0, n)))
 
 
-def split_at(iterable, pred):
+def split_at(iterable, pred, maxsplit=-1, keep_separator=False):
     """Yield lists of items from *iterable*, where each list is delimited by
-    an item where callable *pred* returns ``True``. The lists do not include
-    the delimiting items.
+    an item where callable *pred* returns ``True``.
 
         >>> list(split_at('abcdcba', lambda x: x == 'b'))
         [['a'], ['c', 'd', 'c'], ['a']]
 
         >>> list(split_at(range(10), lambda n: n % 2 == 1))
         [[0], [2], [4], [6], [8], []]
+
+    At most *maxsplit* splits are done. If *maxsplit* is not specified or -1,
+    then there is no limit on the number of splits:
+
+        >>> list(split_at(range(10), lambda n: n % 2 == 1, maxsplit=2))
+        [[0], [2], [4, 5, 6, 7, 8, 9]]
+
+    By default, the delimiting items are not included in the output.
+    The include them, set *keep_separator* to ``True``.
+
+        >>> list(split_at('abcdcba', lambda x: x == 'b', keep_separator=True))
+        [['a'], ['b'], ['c', 'd', 'c'], ['b'], ['a']]
+
     """
+    if maxsplit == 0:
+        yield list(iterable)
+        return
+
     buf = []
-    for item in iterable:
+    it = iter(iterable)
+    for item in it:
         if pred(item):
             yield buf
+            if keep_separator:
+                yield [item]
+            if maxsplit == 1:
+                yield list(it)
+                return
             buf = []
+            maxsplit -= 1
         else:
             buf.append(item)
     yield buf
 
 
-def split_before(iterable, pred):
+def split_before(iterable, pred, maxsplit=-1):
     """Yield lists of items from *iterable*, where each list ends just before
     an item for which callable *pred* returns ``True``:
 
@@ -1095,17 +1173,31 @@ def split_before(iterable, pred):
         >>> list(split_before(range(10), lambda n: n % 3 == 0))
         [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9]]
 
+    At most *maxsplit* splits are done. If *maxsplit* is not specified or -1,
+    then there is no limit on the number of splits:
+
+        >>> list(split_before(range(10), lambda n: n % 3 == 0, maxsplit=2))
+        [[0, 1, 2], [3, 4, 5], [6, 7, 8, 9]]
     """
+    if maxsplit == 0:
+        yield list(iterable)
+        return
+
     buf = []
-    for item in iterable:
+    it = iter(iterable)
+    for item in it:
         if pred(item) and buf:
             yield buf
+            if maxsplit == 1:
+                yield [item] + list(it)
+                return
             buf = []
+            maxsplit -= 1
         buf.append(item)
     yield buf
 
 
-def split_after(iterable, pred):
+def split_after(iterable, pred, maxsplit=-1):
     """Yield lists of items from *iterable*, where each list ends with an
     item where callable *pred* returns ``True``:
 
@@ -1115,18 +1207,33 @@ def split_after(iterable, pred):
         >>> list(split_after(range(10), lambda n: n % 3 == 0))
         [[0], [1, 2, 3], [4, 5, 6], [7, 8, 9]]
 
+    At most *maxsplit* splits are done. If *maxsplit* is not specified or -1,
+    then there is no limit on the number of splits:
+
+        >>> list(split_after(range(10), lambda n: n % 3 == 0, maxsplit=2))
+        [[0], [1, 2, 3], [4, 5, 6, 7, 8, 9]]
+
     """
+    if maxsplit == 0:
+        yield list(iterable)
+        return
+
     buf = []
-    for item in iterable:
+    it = iter(iterable)
+    for item in it:
         buf.append(item)
         if pred(item) and buf:
             yield buf
+            if maxsplit == 1:
+                yield list(it)
+                return
             buf = []
+            maxsplit -= 1
     if buf:
         yield buf
 
 
-def split_when(iterable, pred):
+def split_when(iterable, pred, maxsplit=-1):
     """Split *iterable* into pieces based on the output of *pred*.
     *pred* should be a function that takes successive pairs of items and
     returns ``True`` if the iterable should be split in between them.
@@ -1136,7 +1243,19 @@ def split_when(iterable, pred):
 
         >>> list(split_when([1, 2, 3, 3, 2, 5, 2, 4, 2], lambda x, y: x > y))
         [[1, 2, 3, 3], [2, 5], [2, 4], [2]]
+
+    At most *maxsplit* splits are done. If *maxsplit* is not specified or -1,
+    then there is no limit on the number of splits:
+
+        >>> list(split_when([1, 2, 3, 3, 2, 5, 2, 4, 2],
+        ...                 lambda x, y: x > y, maxsplit=2))
+        [[1, 2, 3, 3], [2, 5], [2, 4, 2]]
+
     """
+    if maxsplit == 0:
+        yield list(iterable)
+        return
+
     it = iter(iterable)
     try:
         cur_item = next(it)
@@ -1147,7 +1266,11 @@ def split_when(iterable, pred):
     for next_item in it:
         if pred(cur_item, next_item):
             yield buf
+            if maxsplit == 1:
+                yield [next_item] + list(it)
+                return
             buf = []
+            maxsplit -= 1
 
         buf.append(next_item)
         cur_item = next_item
@@ -1312,6 +1435,62 @@ def stagger(iterable, offsets=(-1, 0, 1), longest=False, fillvalue=None):
     return zip_offset(
         *children, offsets=offsets, longest=longest, fillvalue=fillvalue
     )
+
+
+class UnequalIterablesError(ValueError):
+    def __init__(self, details=None):
+        msg = 'Iterables have different lengths'
+        if details is not None:
+            msg += (': index 0 has length {}; index {} has length {}').format(
+                *details
+            )
+
+        super().__init__(msg)
+
+
+def zip_equal(*iterables):
+    """``zip`` the input *iterables* together, but raise
+    ``UnequalIterablesError`` if they aren't all the same length.
+
+        >>> it_1 = range(3)
+        >>> it_2 = iter('abc')
+        >>> list(zip_equal(it_1, it_2))
+        [(0, 'a'), (1, 'b'), (2, 'c')]
+
+        >>> it_1 = range(3)
+        >>> it_2 = iter('abcd')
+        >>> list(zip_equal(it_1, it_2)) # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        ...
+        more_itertools.more.UnequalIterablesError: Iterables have different
+        lengths
+
+    """
+    # Check whether the iterables are all the same size.
+    try:
+        first_size = len(iterables[0])
+        for i, it in enumerate(iterables[1:], 1):
+            size = len(it)
+            if size != first_size:
+                break
+        else:
+            # If we didn't break out, we can use the built-in zip.
+            return zip(*iterables)
+
+        # If we did break out, there was a mismatch.
+        raise UnequalIterablesError(details=(first_size, i, size))
+    # If any one of the iterables didn't have a length, start reading
+    # them until one runs out.
+    except TypeError:
+        return _zip_equal_generator(iterables)
+
+
+def _zip_equal_generator(iterables):
+    for combo in zip_longest(*iterables, fillvalue=_marker):
+        for val in combo:
+            if val is _marker:
+                raise UnequalIterablesError()
+        yield combo
 
 
 def zip_offset(*iterables, offsets, longest=False, fillvalue=None):
@@ -1671,12 +1850,13 @@ class numeric_range(abc.Sequence, abc.Hashable):
         datetime.datetime(2019, 1, 2, 0, 0)
 
     """
+
     _EMPTY_HASH = hash(range(0, 0))
 
     def __init__(self, *args):
         argc = len(args)
         if argc == 1:
-            self._stop, = args
+            (self._stop,) = args
             self._start = type(self._stop)(0)
             self._step = type(self._stop - self._start)(1)
         elif argc == 2:
@@ -1685,11 +1865,15 @@ class numeric_range(abc.Sequence, abc.Hashable):
         elif argc == 3:
             self._start, self._stop, self._step = args
         elif argc == 0:
-            raise TypeError('numeric_range expected at least '
-                            '1 argument, got {}'.format(argc))
+            raise TypeError(
+                'numeric_range expected at least '
+                '1 argument, got {}'.format(argc)
+            )
         else:
-            raise TypeError('numeric_range expected at most '
-                            '3 arguments, got {}'.format(argc))
+            raise TypeError(
+                'numeric_range expected at most '
+                '3 arguments, got {}'.format(argc)
+            )
 
         self._zero = type(self._step)(0)
         if self._step == self._zero:
@@ -1720,9 +1904,11 @@ class numeric_range(abc.Sequence, abc.Hashable):
             if empty_self or empty_other:
                 return empty_self and empty_other  # True if both empty
             else:
-                return (self._start == other._start
-                        and self._step == other._step
-                        and self._get_by_index(-1) == other._get_by_index(-1))
+                return (
+                    self._start == other._start
+                    and self._step == other._step
+                    and self._get_by_index(-1) == other._get_by_index(-1)
+                )
         else:
             return False
 
@@ -1750,7 +1936,8 @@ class numeric_range(abc.Sequence, abc.Hashable):
         else:
             raise TypeError(
                 'numeric range indices must be '
-                'integers or slices, not {}'.format(type(key).__name__))
+                'integers or slices, not {}'.format(type(key).__name__)
+            )
 
     def __hash__(self):
         if self:
@@ -1789,16 +1976,20 @@ class numeric_range(abc.Sequence, abc.Hashable):
 
     def __repr__(self):
         if self._step == 1:
-            return "numeric_range({}, {})".format(repr(self._start),
-                                                  repr(self._stop))
+            return "numeric_range({}, {})".format(
+                repr(self._start), repr(self._stop)
+            )
         else:
-            return "numeric_range({}, {}, {})".format(repr(self._start),
-                                                      repr(self._stop),
-                                                      repr(self._step))
+            return "numeric_range({}, {}, {})".format(
+                repr(self._start), repr(self._stop), repr(self._step)
+            )
 
     def __reversed__(self):
-        return iter(numeric_range(self._get_by_index(-1),
-                                  self._start - self._step, -self._step))
+        return iter(
+            numeric_range(
+                self._get_by_index(-1), self._start - self._step, -self._step
+            )
+        )
 
     def count(self, value):
         return int(value in self)
@@ -1839,6 +2030,43 @@ def count_cycle(iterable, n=None):
         return iter(())
     counter = count() if n is None else range(n)
     return ((i, item) for i in counter for item in iterable)
+
+
+def mark_ends(iterable):
+    """Yield 3-tuples of the form ``(is_first, is_last, item)``.
+
+    >>> list(mark_ends('ABC'))
+    [(True, False, 'A'), (False, False, 'B'), (False, True, 'C')]
+
+    Use this when looping over an iterable to take special action on its first
+    and/or last items:
+
+    >>> iterable = ['Header', 100, 200, 'Footer']
+    >>> total = 0
+    >>> for is_first, is_last, item in mark_ends(iterable):
+    ...     if is_first:
+    ...         continue  # Skip the header
+    ...     if is_last:
+    ...         continue  # Skip the footer
+    ...     total += item
+    >>> print(total)
+    300
+    """
+    it = iter(iterable)
+
+    try:
+        b = next(it)
+    except StopIteration:
+        return
+
+    try:
+        for i in count():
+            a = b
+            b = next(it)
+            yield i == 0, False, a
+
+    except StopIteration:
+        yield i == 0, True, a
 
 
 def locate(iterable, pred=bool, window_size=None):
@@ -1950,7 +2178,7 @@ def strip(iterable, pred):
     return rstrip(lstrip(iterable, pred), pred)
 
 
-def islice_extended(iterable, *args):
+class islice_extended:
     """An extension of :func:`itertools.islice` that supports negative values
     for *stop*, *start*, and *step*.
 
@@ -1967,15 +2195,41 @@ def islice_extended(iterable, *args):
         >>> list(islice_extended(count(), 110, 99, -2))
         [110, 108, 106, 104, 102, 100]
 
+    You can also use slice notation directly:
+
+        >>> iterable = map(str, count())
+        >>> it = islice_extended(iterable)[10:20:2]
+        >>> list(it)
+        ['10', '12', '14', '16', '18']
+
     """
-    s = slice(*args)
+
+    def __init__(self, iterable, *args):
+        it = iter(iterable)
+        if args:
+            self._iterable = _islice_helper(it, slice(*args))
+        else:
+            self._iterable = it
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self._iterable)
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            return islice_extended(_islice_helper(self._iterable, key))
+
+        raise TypeError('islice_extended.__getitem__ argument must be a slice')
+
+
+def _islice_helper(it, s):
     start = s.start
     stop = s.stop
     if s.step == 0:
         raise ValueError('step argument must be a non-zero integer or None.')
     step = s.step or 1
-
-    it = iter(iterable)
 
     if step > 0:
         start = 0 if (start is None) else start
@@ -2842,7 +3096,6 @@ def filter_except(validator, iterable, *exceptions):
     If an exception other than one given by *exceptions* is raised by
     *validator*, it is raised like normal.
     """
-    exceptions = tuple(exceptions)
     for item in iterable:
         try:
             validator(item)
@@ -2866,7 +3119,6 @@ def map_except(function, iterable, *exceptions):
     If an exception other than one given by *exceptions* is raised by
     *function*, it is raised like normal.
     """
-    exceptions = tuple(exceptions)
     for item in iterable:
         try:
             yield function(item)
@@ -2969,3 +3221,26 @@ def sample(iterable, k, weights=None):
     else:
         weights = iter(weights)
         return _sample_weighted(iterable, k, weights)
+
+
+def is_sorted(iterable, key=None, reverse=False):
+    """Returns ``True`` if the items of iterable are in sorted order, and
+    ``False`` otherwise. *key* and *reverse* have the same meaning that they do
+    in the built-in :func:`sorted` function.
+
+    >>> is_sorted(['1', '2', '3', '4', '5'], key=int)
+    True
+    >>> is_sorted([5, 4, 3, 1, 2], reverse=True)
+    False
+
+    The function returns ``False`` after encountering the first out-of-order
+    item. If there are no out-of-order items, the iterable is exhausted.
+    """
+
+    compare = lt if reverse else gt
+    it = iterable if (key is None) else map(key, iterable)
+    for a, b in pairwise(it):
+        if compare(a, b):
+            return False
+
+    return True

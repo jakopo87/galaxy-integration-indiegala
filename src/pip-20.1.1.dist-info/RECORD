@@ -1,6 +1,6 @@
-../../bin/pip.exe,sha256=Uwj_M7zzutF8iwpr5O8SbYQBdvx435qlQvSEI1nAaXQ,93024
-../../bin/pip3.9.exe,sha256=Uwj_M7zzutF8iwpr5O8SbYQBdvx435qlQvSEI1nAaXQ,93024
-../../bin/pip3.exe,sha256=Uwj_M7zzutF8iwpr5O8SbYQBdvx435qlQvSEI1nAaXQ,93024
+../../bin/pip.exe,sha256=nCzfrgpG9OLCW8vEsQzt1qURrpNMb7zGR7XEwpcr5oI,93024
+../../bin/pip3.9.exe,sha256=nCzfrgpG9OLCW8vEsQzt1qURrpNMb7zGR7XEwpcr5oI,93024
+../../bin/pip3.exe,sha256=nCzfrgpG9OLCW8vEsQzt1qURrpNMb7zGR7XEwpcr5oI,93024
 pip-20.1.1.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
 pip-20.1.1.dist-info/LICENSE.txt,sha256=W6Ifuwlk-TatfRU2LR7W1JMcyMj5_y1NkRkOEJvnRDE,1090
 pip-20.1.1.dist-info/METADATA,sha256=dwRFheMvgIBpyZllM4tVlf5TfjoXc1ZxlsJf0ze61_M,3634
