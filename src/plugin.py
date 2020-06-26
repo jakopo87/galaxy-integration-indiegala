@@ -139,9 +139,8 @@ class IndieGalaPlugin(Plugin):
         return await self.http_client.get(SHOWCASE_URL % n)
 
     async def get_os_compatibility(self, game_id, context):
-        # cache = self.persistent_cache.get(DOWNLOAD_LINKS_KEY, {})
         cache = self.download_links
-        compat = 0
+        compat = OSCompatibility(0)
 
         if not cache[game_id]:
             return
