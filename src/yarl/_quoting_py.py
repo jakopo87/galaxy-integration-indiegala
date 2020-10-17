@@ -1,14 +1,6 @@
-import os
 import re
-import sys
 from string import ascii_letters, ascii_lowercase, digits
-from typing import Optional, TYPE_CHECKING, cast
-
-
-NO_EXTENSIONS = bool(os.environ.get("YARL_NO_EXTENSIONS"))  # type: bool
-
-if sys.implementation.name != "cpython":
-    NO_EXTENSIONS = True
+from typing import Optional, cast
 
 
 BASCII_LOWERCASE = ascii_lowercase.encode("ascii")
@@ -22,15 +14,22 @@ ALLOWED = UNRESERVED + SUB_DELIMS_WITHOUT_QS
 
 
 _IS_HEX = re.compile(b"[A-Z0-9][A-Z0-9]")
+_IS_HEX_STR = re.compile("[A-Fa-f0-9][A-Fa-f0-9]")
 
 
 class _Quoter:
     def __init__(
-        self, *, safe: str = "", protected: str = "", qs: bool = False
+        self,
+        *,
+        safe: str = "",
+        protected: str = "",
+        qs: bool = False,
+        requote: bool = True
     ) -> None:
         self._safe = safe
         self._protected = protected
         self._qs = qs
+        self._requote = requote
 
     def __call__(self, val: Optional[str]) -> Optional[str]:
         if val is None:
@@ -88,7 +87,7 @@ class _Quoter:
 
                 continue
 
-            elif ch == ord("%"):
+            elif ch == ord("%") and self._requote:
                 pct.clear()
                 pct.append(ch)
 
@@ -128,18 +127,13 @@ class _Unquoter:
             raise TypeError("Argument should be str")
         if not val:
             return ""
-        pct = ""
         last_pct = ""
         pcts = bytearray()
         ret = []
-        for ch in val:
-            if pct:
-                pct += ch
-                if len(pct) == 3:  # pragma: no branch   # peephole optimizer
-                    pcts.append(int(pct[1:], base=16))
-                    last_pct = pct
-                    pct = ""
-                continue
+        idx = 0
+        while idx < len(val):
+            ch = val[idx]
+            idx += 1
             if pcts:
                 try:
                     unquoted = pcts.decode("utf8")
@@ -160,9 +154,13 @@ class _Unquoter:
                         ret.append(unquoted)
                     del pcts[:]
 
-            if ch == "%":
-                pct = ch
-                continue
+            if ch == "%" and idx <= len(val) - 2:
+                pct = val[idx : idx + 2]  # noqa: E203
+                if _IS_HEX_STR.fullmatch(pct):
+                    pcts.append(int(pct, base=16))
+                    last_pct = "%" + pct
+                    idx += 2
+                    continue
 
             if pcts:
                 ret.append(last_pct)  # %F8ab
@@ -206,14 +204,3 @@ class _Unquoter:
         if ret2 == val:
             return val
         return ret2
-
-
-_PyQuoter = _Quoter
-_PyUnquoter = _Unquoter
-
-if not TYPE_CHECKING and not NO_EXTENSIONS:  # pragma: no branch
-    try:
-        from ._quoting import _Quoter, _Unquoter
-    except ImportError:  # pragma: no cover
-        _Quoter = _PyQuoter
-        _Unquoter = _PyUnquoter

@@ -6,7 +6,7 @@ GOG Galaxy Integration for Indiegala
 ## Known Issues
 Only works with games listed in your showcase: https://www.indiegala.com/library/showcase
 
-Connections can be lost because of IndieGala's bot detection. The plugin can be reconnected and a browser popup will open to the library. If there is no captcha, the window will close on its own. 
+Connections can be lost because of IndieGala's bot detection. The plugin can be reconnected and a browser popup will open to the library. If there is no captcha, the window will close on its own.
 
 
 ## Installation
@@ -30,7 +30,7 @@ for example:
 1. create and activate virtual environment
 2. install dependencies
 
-        pip install -r .\requirements\dev.txt -t .\src\
+        pip install -r .\requirements\dev.txt -t .\src\ --no-use-pep517 --update
 
 3. run tests
 

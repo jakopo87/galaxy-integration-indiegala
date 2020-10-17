@@ -2,6 +2,6 @@
 # make sure they are installable on all systems your plugin should support
 
 # check newest API version: https://pypi.org/project/galaxy.plugin.api/
-galaxy.plugin.api>=0.65
+galaxy.plugin.api>=0.67
 beautifulsoup4==4.9.0
 aiohttp==3.6.2

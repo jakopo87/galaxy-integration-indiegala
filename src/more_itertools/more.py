@@ -1,6 +1,8 @@
 import warnings
+
 from collections import Counter, defaultdict, deque, abc
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial, wraps
 from heapq import merge, heapify, heapreplace, heappop
 from itertools import (
@@ -18,9 +20,10 @@ from itertools import (
     zip_longest,
 )
 from math import exp, floor, log
+from queue import Empty, Queue
 from random import random, randrange, uniform
 from operator import itemgetter, sub, gt, lt
-from sys import maxsize
+from sys import hexversion, maxsize
 from time import monotonic
 
 from .recipes import (
@@ -33,10 +36,12 @@ from .recipes import (
 )
 
 __all__ = [
+    'AbortThread',
     'adjacent',
     'always_iterable',
     'always_reversible',
     'bucket',
+    'callback_iter',
     'chunked',
     'circular_shifts',
     'collapse',
@@ -105,6 +110,7 @@ __all__ = [
     'UnequalIterablesError',
     'zip_equal',
     'zip_offset',
+    'windowed_complete',
 ]
 
 _marker = object()
@@ -175,18 +181,19 @@ def last(iterable, default=_marker):
     raise ``ValueError``.
     """
     try:
-        try:
-            # Try to access the last item directly
+        if isinstance(iterable, Sequence):
             return iterable[-1]
-        except (TypeError, AttributeError, KeyError):
-            # If not slice-able, iterate entirely using length-1 deque
-            return deque(iterable, maxlen=1)[0]
-    except IndexError as e:  # If the iterable was empty
+        # Work around https://bugs.python.org/issue38525
+        elif hasattr(iterable, '__reversed__') and (hexversion != 0x030800F0):
+            return next(reversed(iterable))
+        else:
+            return deque(iterable, maxlen=1)[-1]
+    except (IndexError, TypeError, StopIteration):
         if default is _marker:
             raise ValueError(
-                'last() was called on an empty iterable, and no '
-                'default value was provided.'
-            ) from e
+                'last() was called on an empty iterable, and no default was '
+                'provided.'
+            )
         return default
 
 
@@ -260,7 +267,7 @@ class peekable:
         >>> if p:  # peekable has items
         ...     list(p)
         ['a', 'b']
-        >>> if not p:  # peekable is exhaused
+        >>> if not p:  # peekable is exhausted
         ...     list(p)
         []
 
@@ -462,9 +469,9 @@ def ilen(iterable):
 def iterate(func, start):
     """Return ``start``, ``func(start)``, ``func(func(start))``, ...
 
-        >>> from itertools import islice
-        >>> list(islice(iterate(lambda x: 2*x, 1), 10))
-        [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+    >>> from itertools import islice
+    >>> list(islice(iterate(lambda x: 2*x, 1), 10))
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
 
     """
     while True:
@@ -572,8 +579,10 @@ def distinct_permutations(iterable, r=None):
 
     If *r* is given, only the *r*-length permutations are yielded.
 
-        >>> sorted(distinct_permutations([1, 0, 1], r=3))
-        [(0, 1, 1), (1, 0, 1), (1, 1, 0)]
+        >>> sorted(distinct_permutations([1, 0, 1], r=2))
+        [(0, 1), (1, 0), (1, 1)]
+        >>> sorted(distinct_permutations(range(3), r=2))
+        [(0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1)]
 
     """
     # Algorithm: https://w.wiki/Qai
@@ -1761,21 +1770,23 @@ def adjacent(predicate, iterable, distance=1):
     return zip(adjacent_to_selected, i2)
 
 
-def groupby_transform(iterable, keyfunc=None, valuefunc=None):
-    """An extension of :func:`itertools.groupby` that transforms the values of
-    *iterable* after grouping them.
-    *keyfunc* is a function used to compute a grouping key for each item.
-    *valuefunc* is a function for transforming the items after grouping.
+def groupby_transform(iterable, keyfunc=None, valuefunc=None, reducefunc=None):
+    """An extension of :func:`itertools.groupby` that can apply transformations
+    to the grouped data.
 
-        >>> iterable = 'AaaABbBCcA'
-        >>> keyfunc = lambda x: x.upper()
-        >>> valuefunc = lambda x: x.lower()
-        >>> grouper = groupby_transform(iterable, keyfunc, valuefunc)
-        >>> [(k, ''.join(g)) for k, g in grouper]
-        [('A', 'aaaa'), ('B', 'bbb'), ('C', 'cc'), ('A', 'a')]
+    * *keyfunc* is a function computing a key value for each item in *iterable*
+    * *valuefunc* is a function that transforms the individual items from
+      *iterable* after grouping
+    * *reducefunc* is a function that transforms each group of items
 
-    *keyfunc* and *valuefunc* default to identity functions if they are not
-    specified.
+    >>> iterable = 'aAAbBBcCC'
+    >>> keyfunc = lambda k: k.upper()
+    >>> valuefunc = lambda v: v.lower()
+    >>> reducefunc = lambda g: ''.join(g)
+    >>> list(groupby_transform(iterable, keyfunc, valuefunc, reducefunc))
+    [('A', 'aaa'), ('B', 'bbb'), ('C', 'ccc')]
+
+    Each optional argument defaults to an identity function if not specified.
 
     :func:`groupby_transform` is useful when grouping elements of an iterable
     using a separate iterable as the key. To do this, :func:`zip` the iterables
@@ -1795,8 +1806,13 @@ def groupby_transform(iterable, keyfunc=None, valuefunc=None):
     duplicate groups, you should sort the iterable by the key function.
 
     """
-    res = groupby(iterable, keyfunc)
-    return ((k, map(valuefunc, g)) for k, g in res) if valuefunc else res
+    ret = groupby(iterable, keyfunc)
+    if valuefunc:
+        ret = ((k, map(valuefunc, g)) for k, g in ret)
+    if reducefunc:
+        ret = ((k, reducefunc(g)) for k, g in ret)
+
+    return ret
 
 
 class numeric_range(abc.Sequence, abc.Hashable):
@@ -2632,8 +2648,8 @@ def exactly_n(iterable, n, predicate=bool):
 def circular_shifts(iterable):
     """Return a list of circular shifts of *iterable*.
 
-        >>> circular_shifts(range(4))
-        [(0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2)]
+    >>> circular_shifts(range(4))
+    [(0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2)]
     """
     lst = list(iterable)
     return take(len(lst), windowed(cycle(lst), len(lst)))
@@ -2876,7 +2892,7 @@ def replace(iterable, pred, substitutes, count=None, window_size=1):
 
 
 def partitions(iterable):
-    """Yield all possible order-perserving partitions of *iterable*.
+    """Yield all possible order-preserving partitions of *iterable*.
 
     >>> iterable = 'abc'
     >>> for part in partitions(iterable):
@@ -3239,8 +3255,171 @@ def is_sorted(iterable, key=None, reverse=False):
 
     compare = lt if reverse else gt
     it = iterable if (key is None) else map(key, iterable)
-    for a, b in pairwise(it):
-        if compare(a, b):
-            return False
+    return not any(starmap(compare, pairwise(it)))
 
-    return True
+
+class AbortThread(BaseException):
+    pass
+
+
+class callback_iter:
+    """Convert a function that uses callbacks to an iterator.
+
+    Let *func* be a function that takes a `callback` keyword argument.
+    For example:
+
+    >>> def func(callback=None):
+    ...     for i, c in [(1, 'a'), (2, 'b'), (3, 'c')]:
+    ...         if callback:
+    ...             callback(i, c)
+    ...     return 4
+
+
+    Use ``with callback_iter(func)`` to get an iterator over the parameters
+    that are delivered to the callback.
+
+    >>> with callback_iter(func) as it:
+    ...     for args, kwargs in it:
+    ...         print(args)
+    (1, 'a')
+    (2, 'b')
+    (3, 'c')
+
+    The function will be called in a background thread. The ``done`` property
+    indicates whether it has completed execution.
+
+    >>> it.done
+    True
+
+    If it completes successfully, its return value will be available
+    in the ``result`` property.
+
+    >>> it.result
+    4
+
+    Notes:
+
+    * If the function uses some keyword argument besides ``callback``, supply
+      *callback_kwd*.
+    * If it finished executing, but raised an exception, accessing the
+      ``result`` property will raise the same exception.
+    * If it hasn't finished executing, accessing the ``result``
+      property from within the ``with`` block will raise ``RuntimeError``.
+    * If it hasn't finished executing, accessing the ``result`` property from
+      outside the ``with`` block will raise a
+      ``more_itertools.AbortThread`` exception.
+    * Provide *wait_seconds* to adjust how frequently the it is polled for
+      output.
+
+    """
+
+    def __init__(self, func, callback_kwd='callback', wait_seconds=0.1):
+        self._func = func
+        self._callback_kwd = callback_kwd
+        self._aborted = False
+        self._future = None
+        self._wait_seconds = wait_seconds
+        self._executor = ThreadPoolExecutor(max_workers=1)
+        self._iterator = self._reader()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._aborted = True
+        self._executor.shutdown()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self._iterator)
+
+    @property
+    def done(self):
+        if self._future is None:
+            return False
+        return self._future.done()
+
+    @property
+    def result(self):
+        if not self.done:
+            raise RuntimeError('Function has not yet completed')
+
+        return self._future.result()
+
+    def _reader(self):
+        q = Queue()
+
+        def callback(*args, **kwargs):
+            if self._aborted:
+                raise AbortThread('canceled by user')
+
+            q.put((args, kwargs))
+
+        self._future = self._executor.submit(
+            self._func, **{self._callback_kwd: callback}
+        )
+
+        while True:
+            try:
+                item = q.get(timeout=self._wait_seconds)
+            except Empty:
+                pass
+            else:
+                q.task_done()
+                yield item
+
+            if self._future.done():
+                break
+
+        remaining = []
+        while True:
+            try:
+                item = q.get_nowait()
+            except Empty:
+                break
+            else:
+                q.task_done()
+                remaining.append(item)
+        q.join()
+        yield from remaining
+
+
+def windowed_complete(iterable, n):
+    """
+    Yield ``(beginning, middle, end)`` tuples, where:
+
+    * Each ``middle`` has *n* items from *iterable*
+    * Each ``beginning`` has the items before the ones in ``middle``
+    * Each ``end`` has the items after the ones in ``middle``
+
+    >>> iterable = range(7)
+    >>> n = 3
+    >>> for beginning, middle, end in windowed_complete(iterable, n):
+    ...     print(beginning, middle, end)
+    () (0, 1, 2) (3, 4, 5, 6)
+    (0,) (1, 2, 3) (4, 5, 6)
+    (0, 1) (2, 3, 4) (5, 6)
+    (0, 1, 2) (3, 4, 5) (6,)
+    (0, 1, 2, 3) (4, 5, 6) ()
+
+    Notes:
+       * *n* must be at least 0 and most equal to the length of *iterable*.
+       * This function will exhaust *iterable* and store all its items.
+
+    """
+    if n < 0:
+        raise ValueError('n must be >= 0')
+
+    seq = tuple(iterable)
+    size = len(seq)
+
+    if n > size:
+        raise ValueError('n must be <= len(seq)')
+
+    for i in range(size - n + 1):
+        beginning = seq[:i]
+        middle = seq[i : i + n]
+        end = seq[i + n :]
+        yield beginning, middle, end

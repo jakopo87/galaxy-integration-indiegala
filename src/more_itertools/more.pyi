@@ -19,6 +19,7 @@ from typing import (
     TypeVar,
     type_check_only,
 )
+from types import TracebackType
 from typing_extensions import ContextManager, Protocol, Type, overload
 
 # Type and type variable definitions
@@ -191,7 +192,10 @@ def stagger(
     fillvalue: _U = ...,
 ) -> Iterator[Tuple[Union[_T, _U], ...]]: ...
 
-class UnequalIterablesError(ValueError): ...
+class UnequalIterablesError(ValueError):
+    def __init__(
+        self, details: Optional[Tuple[int, int, int]] = ...
+    ) -> None: ...
 
 def zip_equal(*iterables: Iterable[_T]) -> Iterator[Tuple[_T, ...]]: ...
 @overload
@@ -223,26 +227,12 @@ def adjacent(
     iterable: Iterable[_T],
     distance: int = ...,
 ) -> Iterator[Tuple[bool, _T]]: ...
-@overload
-def groupby_transform(
-    iterable: Iterable[_T], keyfunc: None = ..., valuefunc: None = ...
-) -> Iterator[Tuple[_T, Iterator[_T]]]: ...
-@overload
-def groupby_transform(
-    iterable: Iterable[_T], keyfunc: Callable[[_T], _U], valuefunc: None = ...
-) -> Iterator[Tuple[_U, Iterator[_T]]]: ...
-@overload
 def groupby_transform(
     iterable: Iterable[_T],
-    keyfunc: None = ...,
-    valuefunc: Callable[[_T], _V] = ...,
-) -> Iterator[Tuple[_T, Iterator[_V]]]: ...
-@overload
-def groupby_transform(
-    iterable: Iterable[_T],
-    keyfunc: Callable[[_T], _U],
-    valuefunc: Callable[[_T], _V],
-) -> Iterator[Tuple[_U, Iterator[_V]]]: ...
+    keyfunc: Optional[Callable[[_T], _U]] = ...,
+    valuefunc: Optional[Callable[[_T], _V]] = ...,
+    reducefunc: Optional[Callable[..., _W]] = ...,
+) -> Iterator[Tuple[_T, _W]]: ...
 
 class numeric_range(Generic[_T, _U], Sequence[_T], Hashable, Reversible[_T]):
     @overload
@@ -272,7 +262,9 @@ class numeric_range(Generic[_T, _U], Sequence[_T], Hashable, Reversible[_T]):
 def count_cycle(
     iterable: Iterable[_T], n: Optional[int] = ...
 ) -> Iterable[Tuple[int, _T]]: ...
-def mark_ends(iterable: Iterable[_T],) -> Iterable[Tuple[bool, bool, _T]]: ...
+def mark_ends(
+    iterable: Iterable[_T],
+) -> Iterable[Tuple[bool, bool, _T]]: ...
 def locate(
     iterable: Iterable[object],
     pred: Callable[..., Any] = ...,
@@ -412,10 +404,41 @@ def map_except(
     *exceptions: Type[BaseException]
 ) -> Iterator[_U]: ...
 def sample(
-    iterable: Iterable[_T], k: int, weights: Optional[Iterable[float]] = ...,
+    iterable: Iterable[_T],
+    k: int,
+    weights: Optional[Iterable[float]] = ...,
 ) -> List[_T]: ...
 def is_sorted(
     iterable: Iterable[_T],
     key: Optional[Callable[[_T], _U]] = ...,
     reverse: bool = False,
 ) -> bool: ...
+
+class AbortThread(BaseException):
+    pass
+
+class callback_iter(Generic[_T], Iterator[_T]):
+    def __init__(
+        self,
+        func: Callable[..., Any],
+        callback_kwd: str = ...,
+        wait_seconds: float = ...,
+    ) -> None: ...
+    def __enter__(self) -> callback_iter[_T]: ...
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> Optional[bool]: ...
+    def __iter__(self) -> callback_iter[_T]: ...
+    def __next__(self) -> _T: ...
+    def _reader(self) -> Iterator[_T]: ...
+    @property
+    def done(self) -> bool: ...
+    @property
+    def result(self) -> Any: ...
+
+def windowed_complete(
+    iterable: Iterable[_T], n: int
+) -> Iterator[Tuple[_T, ...]]: ...
