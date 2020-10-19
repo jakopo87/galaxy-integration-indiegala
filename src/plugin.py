@@ -4,6 +4,8 @@ from pathlib import Path
 import sys
 import webbrowser
 import re
+import pickle
+import os
 
 from bs4 import BeautifulSoup
 from galaxy.api.plugin import Plugin, create_and_run_plugin
@@ -61,6 +63,12 @@ SHOWCASE_URL = 'https://www.indiegala.com/library/showcase/%s'
 
 HOMEPAGE = 'https://www.indiegala.com'
 
+PLUGIN_FILE_PATH = os.path.dirname(os.path.realpath(__file__))
+DATA_CACHE_FILE_PATH = PLUGIN_FILE_PATH + '/data_cache'
+LOCAL_GAMES_CACHE = DATA_CACHE_FILE_PATH + '/games.dict'
+LOCAL_URL_CACHE = DATA_CACHE_FILE_PATH + '/url.dict'
+LOCAL_USERINFO_CACHE = DATA_CACHE_FILE_PATH+'/user.dict'
+
 
 class IndieGalaPlugin(Plugin):
     def __init__(self, reader, writer, token):
@@ -76,6 +84,8 @@ class IndieGalaPlugin(Plugin):
         self.download_links = json.loads(
             self.persistent_cache.get(DOWNLOAD_LINKS_KEY, '{}'))
 
+        os.makedirs(name=DATA_CACHE_FILE_PATH, exist_ok=True)
+
     async def shutdown(self):
         await self.http_client.close()
 
@@ -84,36 +94,49 @@ class IndieGalaPlugin(Plugin):
         if not stored_credentials:
             return NextStep("web_session", AUTH_PARAMS)
         self.http_client.update_cookies(stored_credentials)
-        try:
-            return await self.get_user_info()
-        except AuthenticationRequired:
-            return NextStep("web_session", SECURITY_AUTH_PARAMS, cookies=self.http_client.get_next_step_cookies(), js=SECURITY_JS)
+        return await self.get_user_info()
 
     async def pass_login_credentials(self, step, credentials, cookies):
         """Called just after CEF authentication (called as NextStep by authenticate)"""
         session_cookies = {cookie['name']: cookie['value']
                            for cookie in cookies if cookie['name']}
         self.http_client.update_cookies(session_cookies)
-        try:
-            return await self.get_user_info()
-        except AuthenticationRequired:
-            return NextStep("web_session", SECURITY_AUTH_PARAMS, cookies=self.http_client.get_next_step_cookies(), js=SECURITY_JS)
+        return await self.get_user_info()
 
     async def get_owned_games(self):
+        games = self.load_local_cache(LOCAL_GAMES_CACHE)
+        if games:
+            return games
+
         page = 1
-        games = []
         while True:
-            try:
-                raw_html = await self.retrieve_showcase_html(page)
-            except AuthenticationRequired:
-                self.lost_authentication()
-                raise
+            raw_html = await self.retrieve_showcase_html(page)
             if 'Your showcase list is actually empty.' in raw_html:
+                self.save_local_cache(LOCAL_GAMES_CACHE, games)
+                self.save_local_cache(LOCAL_URL_CACHE, self.download_links)
                 return games
             soup = BeautifulSoup(raw_html)
             games.extend(self.parse_html_into_games(soup))
             self.cache_download_url(soup)
             page += 1
+
+    def load_local_cache(self, path):
+        try:
+            with open(path, 'rb') as cache:
+                data = pickle.load(cache)
+                logging.debug("loaded from local cache")
+                return data
+        except:
+            logging.debug("no local game cache found")
+            return []
+
+    def save_local_cache(self, path, data):
+        try:
+            with open(path, 'wb+') as cache:
+                pickle.dump(data, cache)
+            logging.debug("saved to local cache")
+        except:
+            raise
 
     def cache_download_url(self, soup):
         links = soup.select('.library-showcase-download-btn')
@@ -132,12 +155,14 @@ class IndieGalaPlugin(Plugin):
     async def get_user_info(self):
         text = await self.http_client.get(HOMEPAGE)
         soup = BeautifulSoup(text)
-        try:
+
+        # try:
+        username = self.load_local_cache(LOCAL_USERINFO_CACHE)
+        if not username:
             username_div = soup.select('div.username-text')[0]
             username = str(username_div.string)
-            return Authentication(username, username)
-        except AuthenticationRequired:
-            return NextStep("web_session", SECURITY_AUTH_PARAMS, cookies=self.http_client.get_next_step_cookies(), js=SECURITY_JS)
+            self.save_local_cache(LOCAL_USERINFO_CACHE, username)
+        return Authentication(username, username)
 
     async def retrieve_showcase_html(self, n=1):
         return await self.http_client.get(SHOWCASE_URL % n)
