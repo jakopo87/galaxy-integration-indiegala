@@ -27,6 +27,7 @@ class HTTPClient(object):
     """
     Intended to store and track cookies and update them on each request
     """
+
     def __init__(self, store_credentials):
         self.cookieJar = CookieJar()
         self.cookieJar.set_cookies_updated_callback(store_credentials)

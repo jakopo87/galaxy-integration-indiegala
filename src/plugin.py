@@ -81,8 +81,9 @@ class IndieGalaPlugin(Plugin):
         )
         self.http_client = HTTPClient(self.store_credentials)
         self.session_cookie = None
-        self.download_links = json.loads(
-            self.persistent_cache.get(DOWNLOAD_LINKS_KEY, '{}'))
+        self.download_links = self.load_local_cache(LOCAL_URL_CACHE)
+        if not self.download_links:
+            self.download_links = {}
 
         os.makedirs(name=DATA_CACHE_FILE_PATH, exist_ok=True)
 
@@ -91,12 +92,18 @@ class IndieGalaPlugin(Plugin):
 
     # implement methods
     async def authenticate(self, stored_credentials=None):
+        if self.load_local_cache(LOCAL_USERINFO_CACHE):
+            return await self.get_user_info()
+
         if not stored_credentials:
             return NextStep("web_session", AUTH_PARAMS)
         self.http_client.update_cookies(stored_credentials)
         return await self.get_user_info()
 
     async def pass_login_credentials(self, step, credentials, cookies):
+        if self.load_local_cache(LOCAL_USERINFO_CACHE):
+            return await self.get_user_info()
+
         """Called just after CEF authentication (called as NextStep by authenticate)"""
         session_cookies = {cookie['name']: cookie['value']
                            for cookie in cookies if cookie['name']}
@@ -117,7 +124,7 @@ class IndieGalaPlugin(Plugin):
                 return games
             soup = BeautifulSoup(raw_html)
             games.extend(self.parse_html_into_games(soup))
-            self.cache_download_url(soup)
+            self.parse_download_url(soup)
             page += 1
 
     def load_local_cache(self, path):
@@ -138,7 +145,7 @@ class IndieGalaPlugin(Plugin):
         except:
             raise
 
-    def cache_download_url(self, soup):
+    def parse_download_url(self, soup):
         links = soup.select('.library-showcase-download-btn')
         cache = self.download_links
 
@@ -153,12 +160,10 @@ class IndieGalaPlugin(Plugin):
         self.push_cache()
 
     async def get_user_info(self):
-        text = await self.http_client.get(HOMEPAGE)
-        soup = BeautifulSoup(text)
-
-        # try:
         username = self.load_local_cache(LOCAL_USERINFO_CACHE)
         if not username:
+            text = await self.http_client.get(HOMEPAGE)
+            soup = BeautifulSoup(text)
             username_div = soup.select('div.username-text')[0]
             username = str(username_div.string)
             self.save_local_cache(LOCAL_USERINFO_CACHE, username)
