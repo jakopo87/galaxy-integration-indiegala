@@ -14,6 +14,7 @@ from galaxy.api.types import NextStep, Authentication, Game, LicenseInfo
 from galaxy.api.errors import AuthenticationRequired
 
 from http_client import HTTPClient
+from pip._vendor.distlib._backport import shutil
 
 with open(Path(__file__).parent / 'manifest.json', 'r') as f:
     __version__ = json.load(f)['version']
@@ -197,6 +198,15 @@ class IndieGalaPlugin(Plugin):
         url = game_links[Supported_os[sys.platform]]
         logging.debug('Launching %s', url)
         webbrowser.open(url)
+
+    def delete_cache(self):
+        logging.info("Delete local cache: " + DATA_CACHE_FILE_PATH)
+        shutil.rmtree(DATA_CACHE_FILE_PATH, True)
+        pass
+
+    async def _shutdown(self):
+        self.delete_cache()
+        await super()._shutdown()
 
     @staticmethod
     def parse_html_into_games(soup):
