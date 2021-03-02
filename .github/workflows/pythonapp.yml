@@ -1,10 +1,13 @@
 name: Release
 
 on:
-  push:
-    branches: [github-actions]
-  pull_request:
-    branches: [github-actions]
+  release:
+    types:
+      - created
+  # push:
+  #   branches: [github-actions]
+  # pull_request:
+  #   branches: [github-actions]
 
 jobs:
   build:
@@ -26,5 +29,5 @@ jobs:
       - uses: djnicholson/release-action@v2.10
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          asset-name: 'indiegala-showcase.zip'
-          file: 'indiegala-showcase.zip'
+          asset-name: "indiegala-showcase.zip"
+          file: "indiegala-showcase.zip"
