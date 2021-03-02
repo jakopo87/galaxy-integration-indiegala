@@ -1,11 +1,11 @@
 {
-    "name": "Indie Gala",
+    "name": "Indie Gala Showcase",
     "platform": "indiegala",
-    "guid": "a1a85742-f3e0-42ae-bde9-64ab7d0321cf",
-    "version": "0.0.8",
+    "guid": "36acb84a-5b49-4e2b-bb17-ac9f082f62b0",
+    "version": "0.1.0",
     "description": "Indie Gala",
-    "author": "Chris Burnham",
-    "email": "chris@burnhamup.com",
-    "url": "https://github.com/burnhamup/galaxy-integration-indiegala",
+    "author": "Jacopo Galati",
+    "email": "jacopo.galati@outlook.com",
+    "url": "https://github.com/jakopo87/galaxy-integration-indiegala",
     "script": "plugin.py"
 }
