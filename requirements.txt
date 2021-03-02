@@ -5,3 +5,4 @@
 galaxy.plugin.api>=0.67
 beautifulsoup4==4.9.0
 aiohttp==3.6.2
+pip==21.0.1
