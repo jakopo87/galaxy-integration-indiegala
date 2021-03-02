@@ -18,4 +18,4 @@ jobs:
           python-version: 3.7
       - name: Install dependencies
         run: |
-          pip install -r .\requirements\dev.txt -t .\src\ --no-use-pep517
+          pip install -r .\requirements.txt -t .\src\ --no-use-pep517
