@@ -23,3 +23,8 @@ jobs:
         run: |
           Move-Item .\src "indiegala-showcase"
           Compress-Archive -Path "indiegala-showcase" -DestinationPath "indiegala-showcase.zip"
+      - uses: djnicholson/release-action@v2.10
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          asset-name: 'indiegala-showcase.zip'
+          file: 'indiegala-showcase.zip'
