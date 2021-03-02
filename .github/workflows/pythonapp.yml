@@ -19,3 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r .\requirements.txt -t .\src\ --no-use-pep517
+      - name: Make Zip
+        run: |
+          Move-Item .\src "indiegala-showcase"
+          Compress-Archive -Path "indiegala-showcase" -DestinationPath "indiegala-showcase.zip"
