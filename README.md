@@ -21,5 +21,5 @@ for example:
 
 ## Development
 
-1. install dependencies
-        pip install -r .\requirements\dev.txt -t .\src\ --no-use-pep517 --update
+Use this command to install dependencies from the root of the project:
+`pip install -r .\requirements.txt -t .\src\ --no-use-pep517`
