@@ -3,7 +3,7 @@ name: Release
 on:
   release:
     types:
-      - published
+      - released
   # push:
   #   branches: [github-actions]
   # pull_request:
