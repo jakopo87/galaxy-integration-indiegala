@@ -119,10 +119,22 @@ class IndieGalaPlugin(Plugin):
         page = 1
         while True:
             raw_html = await self.retrieve_showcase_html(page)
+
             if 'Your showcase list is actually empty.' in raw_html:
                 self.save_local_cache(LOCAL_GAMES_CACHE, games)
                 self.save_local_cache(LOCAL_URL_CACHE, self.download_links)
                 return games
+
+            if 'Profile locked' in raw_html:
+                logging.debug('IP check required')
+                self.lost_authentication()
+                raise AuthenticationRequired()
+
+            if '_Incapsula_Resource' in raw_html:
+                logging.debug('Incapsula challenge on showcase page %s', page)
+                self.lost_authentication()
+                raise AuthenticationRequired()
+
             soup = BeautifulSoup(raw_html)
             games.extend(self.parse_html_into_games(soup))
             self.parse_download_url(soup)
@@ -164,6 +176,14 @@ class IndieGalaPlugin(Plugin):
         username = self.load_local_cache(LOCAL_USERINFO_CACHE)
         if not username:
             text = await self.http_client.get(HOMEPAGE)
+
+            if '_Incapsula_Resource' in text:
+                logging.debug('Incapsula challenge on get_user_info')
+                # TODO try returning a NextStep() to open a browser. Can I open a next step to /library?
+                raise AuthenticationRequired()
+            if 'Profile locked' in text:
+                logging.debug('IP check required')
+
             soup = BeautifulSoup(text)
             username_div = soup.select('div.username-text')[0]
             username = str(username_div.string)
