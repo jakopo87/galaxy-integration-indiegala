@@ -2,10 +2,10 @@
     "name": "Indie Gala Showcase",
     "platform": "indiegala",
     "guid": "36acb84a-5b49-4e2b-bb17-ac9f082f62b0",
-    "version": "0.1.0",
+    "version": "0.1",
     "description": "Indie Gala",
     "author": "Jacopo Galati",
     "email": "jacopo.galati@outlook.com",
-    "url": "https://github.com/jakopo87/galaxy-integration-indiegala",
+    "url": "",
     "script": "plugin.py"
 }
