@@ -91,25 +91,25 @@ class IndieGalaPlugin(Plugin):
     async def shutdown(self):
         await self.http_client.close()
 
-    # implement methods
     async def authenticate(self, stored_credentials=None):
-        if self.load_local_cache(LOCAL_USERINFO_CACHE):
-            return await self.get_user_info()
-
         if not stored_credentials:
             return NextStep("web_session", AUTH_PARAMS)
         self.http_client.update_cookies(stored_credentials)
-        return await self.get_user_info()
+
+        try:
+            return await self.get_user_info()
+        except AuthenticationRequired:
+            return NextStep("web_session", SECURITY_AUTH_PARAMS, cookies=self.http_client.get_next_step_cookies(), js=SECURITY_JS)
 
     async def pass_login_credentials(self, step, credentials, cookies):
-        if self.load_local_cache(LOCAL_USERINFO_CACHE):
-            return await self.get_user_info()
-
         """Called just after CEF authentication (called as NextStep by authenticate)"""
         session_cookies = {cookie['name']: cookie['value']
                            for cookie in cookies if cookie['name']}
         self.http_client.update_cookies(session_cookies)
-        return await self.get_user_info()
+        try:
+            return await self.get_user_info()
+        except AuthenticationRequired:
+            return NextStep("web_session", SECURITY_AUTH_PARAMS, cookies=self.http_client.get_next_step_cookies(), js=SECURITY_JS)
 
     async def get_owned_games(self):
         games = self.load_local_cache(LOCAL_GAMES_CACHE)
