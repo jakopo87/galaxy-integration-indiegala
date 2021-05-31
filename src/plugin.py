@@ -176,14 +176,6 @@ class IndieGalaPlugin(Plugin):
         username = self.load_local_cache(LOCAL_USERINFO_CACHE)
         if not username:
             text = await self.http_client.get(HOMEPAGE)
-
-            if '_Incapsula_Resource' in text:
-                logging.debug('Incapsula challenge on get_user_info')
-                # TODO try returning a NextStep() to open a browser. Can I open a next step to /library?
-                raise AuthenticationRequired()
-            if 'Profile locked' in text:
-                logging.debug('IP check required')
-
             soup = BeautifulSoup(text)
             username_div = soup.select('div.username-text')[0]
             username = str(username_div.string)
