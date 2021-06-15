@@ -121,19 +121,21 @@ class IndieGalaPlugin(Plugin):
 
     async def get_owned_games(self):
         info = await self.get_user_info()
-        logging.debug("start_get_owned_games")
-
+        games = info["showcase_content"]["content"]["user_collection"]
         owned_games = []
+
         for game in games:
             game_info = await self.get_product_info(
                 game['prod_slugged_name'], game['prod_dev_namespace'])
-            logging.debug(game_info)
-            # owned_games.append(Game(
-            #     game_id=url_slug,
-            #     game_title=game_name,
-            #     license_info=LicenseInfo(LicenseType.SinglePurchase),
-            #     dlcs=[]
-            # ))
+            product_data = game_info['product_data']
+            owned_games.append(Game(
+                game_id=product_data['prod_slugged_name'],
+                game_title=product_data['name'],
+                license_info=LicenseInfo(LicenseType.SinglePurchase),
+                dlcs=[]
+            ))
+
+        return owned_games
 
     def load_local_cache(self, path):
         try:
