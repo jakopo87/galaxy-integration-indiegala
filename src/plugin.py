@@ -86,7 +86,7 @@ class IndieGalaPlugin(Plugin):
         )
         self.http_client = HTTPClient(self.store_credentials)
         self.session_cookie = None
-        self.download_links = self.load_local_cache(LOCAL_URL_CACHE)
+        self.download_links = self.persistent_cache.get(DOWNLOAD_LINKS_KEY)
         if not self.download_links:
             self.download_links = {}
 
@@ -134,6 +134,11 @@ class IndieGalaPlugin(Plugin):
                 license_info=LicenseInfo(LicenseType.SinglePurchase),
                 dlcs=[]
             ))
+            self.download_links[product_data['prod_slugged_name']
+                                ] = product_data["downloadable_versions"]
+
+        self.persistent_cache[DOWNLOAD_LINKS_KEY] = self.download_links
+        self.push_cache()
 
         return owned_games
 
@@ -154,20 +159,6 @@ class IndieGalaPlugin(Plugin):
             logging.debug("saved to local cache")
         except:
             raise
-
-    def parse_download_url(self, soup):
-        links = soup.select('.library-showcase-download-btn')
-        cache = self.download_links
-
-        for link in links:
-            url = re.search(r"'(.*)'", link['onclick']).groups()[0]
-            game_id, supported_os = url.split("/")[-1].split(".")[0].split("_")
-            game_download_links = cache.get(game_id, {})
-            game_download_links[supported_os] = url
-            cache[game_id] = game_download_links
-
-        self.persistent_cache[DOWNLOAD_LINKS_KEY] = self.download_links
-        self.push_cache()
 
     async def get_user_info(self):
         resp = await self.http_client.get(API_USER_INFO)
