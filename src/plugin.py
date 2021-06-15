@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -225,6 +226,10 @@ class IndieGalaPlugin(Plugin):
     async def _shutdown(self):
         self.delete_cache()
         await super()._shutdown()
+
+    def tick(self):
+        if not self.get_owned_games:
+            self.get_owned_games()
 
     @staticmethod
     def parse_html_into_games(soup):
