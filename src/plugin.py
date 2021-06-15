@@ -64,6 +64,8 @@ SHOWCASE_URL = 'https://www.indiegala.com/library/showcase/%s'
 
 HOMEPAGE = 'https://www.indiegala.com'
 
+API_USER_INFO = "https://2-dot-main-service-dot-indiegala-prod.appspot.com/login_new/user_info"
+
 PLUGIN_FILE_PATH = os.path.dirname(os.path.realpath(__file__))
 DATA_CACHE_FILE_PATH = PLUGIN_FILE_PATH + '/data_cache'
 LOCAL_GAMES_CACHE = DATA_CACHE_FILE_PATH + '/games.dict'
@@ -97,7 +99,7 @@ class IndieGalaPlugin(Plugin):
         self.http_client.update_cookies(stored_credentials)
 
         try:
-            return await self.get_user_info()
+            return await self.get_user_auth()
         except AuthenticationRequired:
             return NextStep("web_session", SECURITY_AUTH_PARAMS, cookies=self.http_client.get_next_step_cookies(), js=SECURITY_JS)
 
@@ -107,7 +109,7 @@ class IndieGalaPlugin(Plugin):
                            for cookie in cookies if cookie['name']}
         self.http_client.update_cookies(session_cookies)
         try:
-            return await self.get_user_info()
+            return await self.get_user_auth()
         except AuthenticationRequired:
             return NextStep("web_session", SECURITY_AUTH_PARAMS, cookies=self.http_client.get_next_step_cookies(), js=SECURITY_JS)
 
@@ -173,13 +175,13 @@ class IndieGalaPlugin(Plugin):
         self.push_cache()
 
     async def get_user_info(self):
-        username = self.load_local_cache(LOCAL_USERINFO_CACHE)
-        if not username:
-            text = await self.http_client.get(HOMEPAGE)
-            soup = BeautifulSoup(text)
-            username_div = soup.select('div.username-text')[0]
-            username = str(username_div.string)
-            self.save_local_cache(LOCAL_USERINFO_CACHE, username)
+        resp = await self.http_client.get(API_USER_INFO)
+        info = json.loads(resp)
+        return info
+
+    async def get_user_auth(self):
+        info = self.get_user_info()
+        username = info['_indiegala_username']
         return Authentication(username, username)
 
     async def retrieve_showcase_html(self, n=1):
