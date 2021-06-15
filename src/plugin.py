@@ -180,7 +180,7 @@ class IndieGalaPlugin(Plugin):
         return info
 
     async def get_user_auth(self):
-        info = self.get_user_info()
+        info = await self.get_user_info()
         username = info['_indiegala_username']
         return Authentication(username, username)
 
