@@ -39,6 +39,8 @@ class HTTPClient(object):
         self.session = create_client_session(
             cookie_jar=self.cookieJar, headers=headers)
 
+    async def post(self, url, payload):
+        self.session.post(url, data=payload)
 
     async def get(self, url):
         """
@@ -46,6 +48,7 @@ class HTTPClient(object):
         :param url:
         :return:
         """
+
         logging.debug('Calling HTTPClient.get with %s', url)
         response = await self.session.get(url)
         text = await response.text()
