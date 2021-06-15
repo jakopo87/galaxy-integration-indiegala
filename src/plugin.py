@@ -215,6 +215,8 @@ class IndieGalaPlugin(Plugin):
     def tick(self):
         if not self.get_owned_games:
             self.get_owned_games()
+        if not self.get_os_compatibility:
+            self.get_os_compatibility()
 
     @staticmethod
     def parse_html_into_games(soup):
