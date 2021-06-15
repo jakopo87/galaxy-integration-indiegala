@@ -66,6 +66,7 @@ SHOWCASE_URL = 'https://www.indiegala.com/library/showcase/%s'
 HOMEPAGE = 'https://www.indiegala.com'
 
 API_USER_INFO = "https://2-dot-main-service-dot-indiegala-prod.appspot.com/login_new/user_info"
+API_PRODUCT_INFO = "https://developers-service-dot-indiegala-prod.appspot.com/get_product_info?prod_name=%s&dev_id=%s"
 
 PLUGIN_FILE_PATH = os.path.dirname(os.path.realpath(__file__))
 DATA_CACHE_FILE_PATH = PLUGIN_FILE_PATH + '/data_cache'
@@ -114,34 +115,25 @@ class IndieGalaPlugin(Plugin):
         except AuthenticationRequired:
             return NextStep("web_session", SECURITY_AUTH_PARAMS, cookies=self.http_client.get_next_step_cookies(), js=SECURITY_JS)
 
+    async def get_product_info(self, prod_name, dev_id):
+        resp = await self.http_client.get(API_PRODUCT_INFO % (prod_name, dev_id))
+        return json.loads(resp)
+
     async def get_owned_games(self):
-        games = self.load_local_cache(LOCAL_GAMES_CACHE)
-        if games:
-            return games
+        info = await self.get_user_info()
+        logging.debug("start_get_owned_games")
 
-        page = 1
-        while True:
-            raw_html = await self.retrieve_showcase_html(page)
-
-            if 'Your showcase list is actually empty.' in raw_html:
-                self.save_local_cache(LOCAL_GAMES_CACHE, games)
-                self.save_local_cache(LOCAL_URL_CACHE, self.download_links)
-                return games
-
-            if 'Profile locked' in raw_html:
-                logging.debug('IP check required')
-                self.lost_authentication()
-                raise AuthenticationRequired()
-
-            if '_Incapsula_Resource' in raw_html:
-                logging.debug('Incapsula challenge on showcase page %s', page)
-                self.lost_authentication()
-                raise AuthenticationRequired()
-
-            soup = BeautifulSoup(raw_html)
-            games.extend(self.parse_html_into_games(soup))
-            self.parse_download_url(soup)
-            page += 1
+        owned_games = []
+        for game in games:
+            game_info = await self.get_product_info(
+                game['prod_slugged_name'], game['prod_dev_namespace'])
+            logging.debug(game_info)
+            # owned_games.append(Game(
+            #     game_id=url_slug,
+            #     game_title=game_name,
+            #     license_info=LicenseInfo(LicenseType.SinglePurchase),
+            #     dlcs=[]
+            # ))
 
     def load_local_cache(self, path):
         try:
