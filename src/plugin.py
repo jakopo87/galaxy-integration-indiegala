@@ -176,7 +176,11 @@ class IndieGalaPlugin(Plugin):
 
     async def get_user_info(self):
         resp = await self.http_client.get(API_USER_INFO)
+
         info = json.loads(resp)
+        if info['user_found'] == 'false':
+            raise AuthenticationRequired
+
         return info
 
     async def get_user_auth(self):
