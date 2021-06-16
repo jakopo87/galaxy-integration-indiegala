@@ -142,24 +142,6 @@ class IndieGalaPlugin(Plugin):
 
         return owned_games
 
-    def load_local_cache(self, path):
-        try:
-            with open(path, 'rb') as cache:
-                data = pickle.load(cache)
-                logging.debug("loaded from local cache")
-                return data
-        except:
-            logging.debug("no local game cache found")
-            return []
-
-    def save_local_cache(self, path, data):
-        try:
-            with open(path, 'wb+') as cache:
-                pickle.dump(data, cache)
-            logging.debug("saved to local cache")
-        except:
-            raise
-
     async def get_user_info(self):
         resp = await self.http_client.get(API_USER_INFO)
 
@@ -215,8 +197,6 @@ class IndieGalaPlugin(Plugin):
     def tick(self):
         if not self.get_owned_games:
             self.get_owned_games()
-        if not self.get_os_compatibility:
-            self.get_os_compatibility()
 
     @staticmethod
     def parse_html_into_games(soup):
