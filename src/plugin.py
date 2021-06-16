@@ -1,14 +1,10 @@
-import asyncio
 import json
 import logging
 from pathlib import Path
 import sys
 import webbrowser
-import re
-import pickle
 import os
 
-from bs4 import BeautifulSoup
 from galaxy.api.plugin import Plugin, create_and_run_plugin
 from galaxy.api.consts import Platform, LicenseType, OSCompatibility
 from galaxy.api.types import NextStep, Authentication, Game, LicenseInfo
