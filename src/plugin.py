@@ -3,7 +3,6 @@ import logging
 from pathlib import Path
 import sys
 import webbrowser
-import os
 
 from galaxy.api.plugin import Plugin, create_and_run_plugin
 from galaxy.api.consts import Platform, LicenseType, OSCompatibility
