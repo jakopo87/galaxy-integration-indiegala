@@ -181,33 +181,9 @@ class IndieGalaPlugin(Plugin):
         logging.debug('Launching %s', url)
         webbrowser.open(url)
 
-    def delete_cache(self):
-        logging.info("Delete local cache: " + DATA_CACHE_FILE_PATH)
-        shutil.rmtree(DATA_CACHE_FILE_PATH, True)
-        pass
-
-    async def _shutdown(self):
-        self.delete_cache()
-        await super()._shutdown()
-
     def tick(self):
         if not self.get_owned_games:
             self.get_owned_games()
-
-    @staticmethod
-    def parse_html_into_games(soup):
-        games = soup.select('a.library-showcase-title')
-        for game in games:
-            game_name = str(game.string)
-            game_href = game['href']
-            url_slug = str(game_href.split('indiegala.com/')[1])
-            logging.debug('Parsed %s, %s', game_name, url_slug)
-            yield Game(
-                game_id=url_slug,
-                game_title=game_name,
-                license_info=LicenseInfo(LicenseType.SinglePurchase),
-                dlcs=[]
-            )
 
 
 def main():
