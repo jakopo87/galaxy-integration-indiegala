@@ -11,16 +11,6 @@ class CookieJar(aiohttp.CookieJar):
     # Inspired by https://github.com/TouwaStar/Galaxy_Plugin_Bethesda/blob/master/betty/http_client.py
     def __init__(self):
         super().__init__()
-        self._cookies_updated_callback = None
-
-    def set_cookies_updated_callback(self, callback):
-        self._cookies_updated_callback = callback
-
-    def update_cookies(self, cookies, url=URL()):
-        super().update_cookies(cookies, url)
-        if cookies and self._cookies_updated_callback:
-            all_cookies = {cookie.key: cookie.value for cookie in self}
-            self._cookies_updated_callback(all_cookies)
 
 
 class HTTPClient(object):
@@ -29,15 +19,14 @@ class HTTPClient(object):
     """
 
     def __init__(self, store_credentials):
-        self.cookieJar = CookieJar()
-        self.cookieJar.set_cookies_updated_callback(store_credentials)
+        self.cookiejar = CookieJar()
 
         headers = {
             'User-Agent': 'galaClient'
         }
 
         self.session = create_client_session(
-            cookie_jar=self.cookieJar, headers=headers)
+            cookie_jar=self.cookiejar, headers=headers)
 
     async def post(self, url, payload):
         self.session.post(url, data=payload)
@@ -61,10 +50,10 @@ class HTTPClient(object):
         return text
 
     def update_cookies(self, cookies):
-        self.cookieJar.update_cookies(cookies)
+        self.cookiejar.update_cookies(cookies)
 
     def get_next_step_cookies(self):
-        return [Cookie(cookie.key, cookie.value) for cookie in self.cookieJar]
+        return [Cookie(cookie.key, cookie.value) for cookie in self.cookiejar]
 
     async def close(self):
         await self.session.close()

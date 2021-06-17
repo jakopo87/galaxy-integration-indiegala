@@ -94,7 +94,6 @@ class IndieGalaPlugin(Plugin):
     async def authenticate(self, stored_credentials=None):
         if not stored_credentials:
             return NextStep("web_session", AUTH_PARAMS)
-        self.http_client.update_cookies(stored_credentials)
 
         try:
             return await self.get_user_auth()
@@ -106,6 +105,7 @@ class IndieGalaPlugin(Plugin):
         session_cookies = {cookie['name']: cookie['value']
                            for cookie in cookies if cookie['name']}
         self.http_client.update_cookies(session_cookies)
+        self.store_credentials(session_cookies)
         try:
             return await self.get_user_auth()
         except AuthenticationRequired:
