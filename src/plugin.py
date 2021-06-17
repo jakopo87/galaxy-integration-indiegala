@@ -64,12 +64,6 @@ HOMEPAGE = 'https://www.indiegala.com'
 API_USER_INFO = "https://2-dot-main-service-dot-indiegala-prod.appspot.com/login_new/user_info"
 API_PRODUCT_INFO = "https://developers-service-dot-indiegala-prod.appspot.com/get_product_info?prod_name=%s&dev_id=%s"
 
-PLUGIN_FILE_PATH = os.path.dirname(os.path.realpath(__file__))
-DATA_CACHE_FILE_PATH = PLUGIN_FILE_PATH + '/data_cache'
-LOCAL_GAMES_CACHE = DATA_CACHE_FILE_PATH + '/games.dict'
-LOCAL_URL_CACHE = DATA_CACHE_FILE_PATH + '/url.dict'
-LOCAL_USERINFO_CACHE = DATA_CACHE_FILE_PATH+'/user.dict'
-
 
 class IndieGalaPlugin(Plugin):
     def __init__(self, reader, writer, token):
@@ -85,8 +79,6 @@ class IndieGalaPlugin(Plugin):
         self.download_links = self.persistent_cache.get(DOWNLOAD_LINKS_KEY)
         if not self.download_links:
             self.download_links = {}
-
-        os.makedirs(name=DATA_CACHE_FILE_PATH, exist_ok=True)
 
     async def shutdown(self):
         await self.http_client.close()
