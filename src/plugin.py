@@ -1,7 +1,9 @@
+from dataclasses import dataclass
 import json
 import logging
 from pathlib import Path
 import sys
+from typing import Any, Dict, List
 import webbrowser
 
 from galaxy.api.plugin import Plugin, create_and_run_plugin
@@ -73,6 +75,7 @@ class IndieGalaPlugin(Plugin):
             writer,
             token
         )
+        self.__owned_games: Dict[str, IndieGalaGame] = {}
         self.http_client = HTTPClient(self.store_credentials)
         self.session_cookie = None
         self.download_links = self.persistent_cache.get(DOWNLOAD_LINKS_KEY)
@@ -109,25 +112,16 @@ class IndieGalaPlugin(Plugin):
     async def get_owned_games(self):
         info = await self.get_user_info()
         games = info["showcase_content"]["content"]["user_collection"]
-        owned_games = []
 
         for game in games:
-            game_info = await self.get_product_info(
-                game['prod_slugged_name'], game['prod_dev_namespace'])
-            product_data = game_info['product_data']
-            owned_games.append(Game(
-                game_id=product_data['prod_slugged_name'],
-                game_title=product_data['name'],
+            self.__owned_games[game['prod_slugged_name']] = IndieGalaGame(
+                game_id=game['prod_slugged_name'],
+                game_title=game['prod_name'],
                 license_info=LicenseInfo(LicenseType.SinglePurchase),
-                dlcs=[]
-            ))
-            self.download_links[product_data['prod_slugged_name']
-                                ] = product_data["downloadable_versions"]
-
-        self.persistent_cache[DOWNLOAD_LINKS_KEY] = self.download_links
-        self.push_cache()
-
-        return owned_games
+                dlcs=[],
+                dev_id=game['prod_dev_namespace']
+            )
+        return list(self.__owned_games.values())
 
     async def get_user_info(self):
         resp = await self.http_client.get(API_USER_INFO)
@@ -146,35 +140,54 @@ class IndieGalaPlugin(Plugin):
     async def retrieve_showcase_html(self, n=1):
         return await self.http_client.get(SHOWCASE_URL % n)
 
+    async def prepare_os_compatibility_context(self, game_ids: List[str]) -> Any:
+        for game_id in game_ids:
+            game = self.__owned_games[game_id]
+            if not game:
+                continue
+
+            game_info = await self.get_product_info(game.game_id, game.dev_id)
+
+            game.download_links = game_info['downloadable_versions']
+
     async def get_os_compatibility(self, game_id, context):
-        cache = self.download_links
         compat = OSCompatibility(0)
+        game = self.__owned_games[game_id]
 
-        if not game_id in cache:
-            return
-
-        cache = cache[game_id]
+        if not game.download_links:
+            return compat
 
         for os_name in ['win', 'lin', 'mac']:
-            if os_name in cache:
+            if os_name in game.download_links:
                 compat = compat | Indiegala_os[os_name]
 
         return compat
 
     async def launch_game(self, game_id: str) -> None:
-        pass
+        logging.debug('Launching %s', game_id)
 
     async def install_game(self, game_id: str) -> None:
         logging.debug('Installing %s', game_id)
-        game_links = self.download_links[game_id]
-        logging.debug(game_links)
-        url = game_links[Supported_os[sys.platform]]
-        logging.debug('Launching %s', url)
+
+        game = self.__owned_games[game_id]
+        if not game:
+            return
+
+        url = game.download_links[Supported_os[sys.platform]]
+
+        logging.debug('Download %s', url)
+
         webbrowser.open(url)
 
     def tick(self):
         if not self.get_owned_games:
             self.get_owned_games()
+
+
+@dataclass
+class IndieGalaGame(Game):
+    dev_id: str
+    download_links: Dict[str, str] = Dict[str, str]
 
 
 def main():
