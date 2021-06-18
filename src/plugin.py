@@ -182,10 +182,6 @@ class IndieGalaPlugin(Plugin):
 
         webbrowser.open(url)
 
-    def tick(self):
-        if not self.get_owned_games:
-            self.get_owned_games()
-
 
 @dataclass
 class IndieGalaGame(Game):
