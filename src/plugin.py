@@ -104,7 +104,6 @@ class IndieGalaPlugin(Plugin):
 
     async def get_product_info(self, prod_name, dev_id):
         resp = await self.http_client.get(API_PRODUCT_INFO % (prod_name, dev_id))
-        logging.debug("Product info %s", resp)
         return json.loads(resp)
 
     async def get_owned_games(self):
@@ -125,7 +124,6 @@ class IndieGalaPlugin(Plugin):
 
     async def get_user_info(self):
         resp = await self.http_client.get(API_USER_INFO)
-        logging.debug("User info: %s", resp)
 
         info = json.loads(resp)
         if info['user_found'] == 'false':
@@ -142,7 +140,6 @@ class IndieGalaPlugin(Plugin):
         return await self.http_client.get(SHOWCASE_URL % n)
 
     async def prepare_os_compatibility_context(self, game_ids: List[str]) -> Any:
-        logging.debug("prepare_os_compatibility_context")
         for game_id in game_ids:
             game = self.__owned_games[game_id]
             if not game:
@@ -153,7 +150,6 @@ class IndieGalaPlugin(Plugin):
             game.download_links = game_info['product_data']['downloadable_versions']
 
     async def get_os_compatibility(self, game_id, context):
-        logging.debug("get os compat for: %s", game_id)
         compat = OSCompatibility(0)
         game = self.__owned_games[game_id]
 
