@@ -148,7 +148,7 @@ class IndieGalaPlugin(Plugin):
 
             game_info = await self.get_product_info(game.game_id, game.dev_id)
 
-            game.download_links = game_info['downloadable_versions']
+            game.download_links = game_info['product_data']['downloadable_versions']
 
     async def get_os_compatibility(self, game_id, context):
         compat = OSCompatibility(0)
