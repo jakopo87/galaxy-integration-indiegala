@@ -83,13 +83,15 @@ class IndieGalaPlugin(Plugin):
     async def authenticate(self, stored_credentials=None):
         if not stored_credentials:
             return NextStep("web_session", AUTH_PARAMS)
-
+        logging.debug("authenticate: %s", stored_credentials)
         try:
             return await self.get_user_auth()
         except AuthenticationRequired:
             return NextStep("web_session", SECURITY_AUTH_PARAMS, cookies=self.http_client.get_next_step_cookies(), js=SECURITY_JS)
 
     async def pass_login_credentials(self, step, credentials, cookies):
+        logging.debug("pass_login_credentials: %s", credentials)
+        logging.debug("pass_login_cookiies: %s", cookies)
         """Called just after CEF authentication (called as NextStep by authenticate)"""
         session_cookies = {cookie['name']: cookie['value']
                            for cookie in cookies if cookie['name']}
@@ -102,6 +104,7 @@ class IndieGalaPlugin(Plugin):
 
     async def get_product_info(self, prod_name, dev_id):
         resp = await self.http_client.get(API_PRODUCT_INFO % (prod_name, dev_id))
+        logging.debug("Product info %s", resp)
         return json.loads(resp)
 
     async def get_owned_games(self):
@@ -116,10 +119,13 @@ class IndieGalaPlugin(Plugin):
                 dlcs=[],
                 dev_id=game['prod_dev_namespace']
             )
+            logging.info("Game owned: %s", game['prod_name'])
+
         return list(self.__owned_games.values())
 
     async def get_user_info(self):
         resp = await self.http_client.get(API_USER_INFO)
+        logging.debug("User info: %s", resp)
 
         info = json.loads(resp)
         if info['user_found'] == 'false':
@@ -136,6 +142,7 @@ class IndieGalaPlugin(Plugin):
         return await self.http_client.get(SHOWCASE_URL % n)
 
     async def prepare_os_compatibility_context(self, game_ids: List[str]) -> Any:
+        logging.debug("prepare_os_compatibility_context")
         for game_id in game_ids:
             game = self.__owned_games[game_id]
             if not game:
@@ -146,6 +153,7 @@ class IndieGalaPlugin(Plugin):
             game.download_links = game_info['product_data']['downloadable_versions']
 
     async def get_os_compatibility(self, game_id, context):
+        logging.debug("get os compat for: %s", game_id)
         compat = OSCompatibility(0)
         game = self.__owned_games[game_id]
 
