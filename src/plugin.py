@@ -174,6 +174,9 @@ class IndieGalaPlugin(Plugin):
             return
 
         url = game.download_links[Supported_os[sys.platform]]
+        # HACK: incorrect url reported from api
+        url = url.replace("https://content.indiegalacdn.com/",
+                          "https://content.indiegalacdn.com/DevShowcaseBuildsVolume/")
 
         logging.debug('Download %s', url)
 
