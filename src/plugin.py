@@ -17,8 +17,6 @@ from pip._vendor.distlib._backport import shutil
 with open(Path(__file__).parent / 'manifest.json', 'r') as f:
     __version__ = json.load(f)['version']
 
-DOWNLOAD_LINKS_KEY = "download_links"
-
 Indiegala_os = {
     'win': OSCompatibility.Windows,
     'lin': OSCompatibility.Linux,
@@ -78,9 +76,6 @@ class IndieGalaPlugin(Plugin):
         self.__owned_games: Dict[str, IndieGalaGame] = {}
         self.http_client = HTTPClient()
         self.session_cookie = None
-        self.download_links = self.persistent_cache.get(DOWNLOAD_LINKS_KEY)
-        if not self.download_links:
-            self.download_links = {}
 
     async def shutdown(self):
         await self.http_client.close()
