@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import logging
 from pathlib import Path
@@ -187,7 +187,7 @@ class IndieGalaPlugin(Plugin):
 @dataclass
 class IndieGalaGame(Game):
     dev_id: str
-    download_links: Dict[str, str] = Dict[str, str]
+    download_links: Dict[str, str] = field(default_factory=lambda: {})
 
 
 def main():
