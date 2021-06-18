@@ -76,7 +76,7 @@ class IndieGalaPlugin(Plugin):
             token
         )
         self.__owned_games: Dict[str, IndieGalaGame] = {}
-        self.http_client = HTTPClient(self.store_credentials)
+        self.http_client = HTTPClient()
         self.session_cookie = None
         self.download_links = self.persistent_cache.get(DOWNLOAD_LINKS_KEY)
         if not self.download_links:
