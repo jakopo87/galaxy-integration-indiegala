@@ -153,9 +153,9 @@ class IndieGalaPlugin(Plugin):
 
     async def get_os_compatibility(self, game_id, context):
         compat = OSCompatibility(0)
-        game = self.__owned_games[game_id]
+        game = self.__owned_games.get(game_id)
 
-        if not game.download_links:
+        if not game:
             return compat
 
         for os_name in Supported_os.values():
