@@ -168,8 +168,8 @@ class IndieGalaPlugin(Plugin):
     async def install_game(self, game_id: str) -> None:
         logging.debug('Installing %s', game_id)
 
-        game = self.__owned_games[game_id]
-        if not game:
+        game = self.__owned_games.get(game_id)
+        if not game or not game.download_links:
             return
 
         url = game.download_links[Supported_os[sys.platform]]
