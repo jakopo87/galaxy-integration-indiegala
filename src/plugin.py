@@ -97,6 +97,8 @@ class IndieGalaPlugin(Plugin):
                            for cookie in cookies if cookie['name']}
         self.http_client.update_cookies(session_cookies)
         self.store_credentials(session_cookies)
+        self.create_task(self.get_owned_games(),
+                         "Calling get_owned_games after login")
         try:
             return await self.get_user_auth()
         except AuthenticationRequired:
