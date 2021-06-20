@@ -17,6 +17,8 @@ from pip._vendor.distlib._backport import shutil
 with open(Path(__file__).parent / 'manifest.json', 'r') as f:
     __version__ = json.load(f)['version']
 
+OWNED_GAMES_CACHE_KEY = "owned_games"
+
 Indiegala_os = {
     'win': OSCompatibility.Windows,
     'lin': OSCompatibility.Linux,
@@ -73,7 +75,11 @@ class IndieGalaPlugin(Plugin):
             writer,
             token
         )
-        self.__owned_games: Dict[str, IndieGalaGame] = {}
+        self.__owned_games: Dict[str, IndieGalaGame] = self.persistent_cache.get(
+            OWNED_GAMES_CACHE_KEY)
+        if not self.__owned_games:
+            self.__owned_games = {}
+
         self.http_client = HTTPClient()
         self.session_cookie = None
 
@@ -150,6 +156,9 @@ class IndieGalaPlugin(Plugin):
             game_info = await self.get_product_info(game.game_id, game.dev_id)
 
             game.download_links = game_info['product_data']['downloadable_versions']
+
+        self.persistent_cache[OWNED_GAMES_CACHE_KEY] = self.__owned_games
+        self.push_cache()
 
     async def get_os_compatibility(self, game_id, context):
         compat = OSCompatibility(0)
