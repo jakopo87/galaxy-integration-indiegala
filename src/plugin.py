@@ -90,6 +90,7 @@ class IndieGalaPlugin(Plugin):
         if not stored_credentials:
             return NextStep("web_session", AUTH_PARAMS)
         logging.debug("authenticate: %s", stored_credentials)
+        # TODO: restore cookies if are there
         try:
             return await self.get_user_auth()
         except AuthenticationRequired:
