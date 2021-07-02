@@ -168,8 +168,12 @@ class IndieGalaPlugin(Plugin):
             return compat
 
         for os_name in Supported_os.values():
-            if os_name in game.download_links:
-                compat = compat | Indiegala_os[os_name]
+            link = game.download_links.get(os_name)
+
+            if not link:
+                continue
+
+            compat |= Indiegala_os[os_name]
 
         return compat
 
